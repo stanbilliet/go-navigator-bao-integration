@@ -1,0 +1,348 @@
+import { NavigatorSelector } from './navigator.js';
+
+var navigator = new NavigatorSelector();
+
+var assignmentModal = new bootstrap.Modal(
+    document.getElementById('assignmentModal')
+);
+
+var assignments = [];
+var currentAssignment = null;
+var currentGoals = [];
+
+
+// -------------------------
+// Event handlers
+// -------------------------
+
+document
+    .getElementById('newAssignment')
+    .addEventListener('click', newAssignment);
+
+document
+    .getElementById('selectGoals')
+    .addEventListener('click', openNavigator);
+
+document
+    .getElementById('saveAssignment')
+    .addEventListener('click', saveAssignment);
+
+
+// -------------------------
+// Navigator events
+// -------------------------
+
+navigator.onReady = function () {
+    console.log('Navigator ready');
+
+    if (currentGoals.length === 0) {
+        return;
+    }
+
+    var selection = [];
+
+    for (var i = 0; i < currentGoals.length; i++) {
+        var goal = currentGoals[i];
+
+        selection.push({
+            curriculumIdentifier: goal.curriculumIdentifier,
+            curriculumItemIdentifier: goal.curriculumItemIdentifier
+        });
+    }
+
+    navigator.setSelection(selection);
+};
+
+
+navigator.onSave = function (selection) {
+    console.log('Selection received from Navigator:', selection);
+
+    var jsonString = JSON.stringify(selection, null, 2);
+
+    console.log('Selection as JSON:', jsonString);
+
+    currentGoals = mapNavigatorSelection(selection);
+
+    renderGoals();
+};
+
+
+navigator.onClose = function () {
+    console.log('Navigator closed');
+};
+
+
+// -------------------------
+// Open Navigator
+// -------------------------
+
+function openNavigator() {
+    navigator.open();
+}
+
+
+// -------------------------
+// Create a new assignment
+// -------------------------
+
+function newAssignment() {
+    currentAssignment = null;
+    currentGoals = [];
+
+    document
+        .getElementById('assignmentModalTitle')
+        .textContent = 'Nieuwe opdracht';
+
+    document
+        .getElementById('assignmentTitle')
+        .value = '';
+
+    renderGoals();
+
+    assignmentModal.show();
+}
+
+
+// -------------------------
+// Save assignment
+// -------------------------
+
+function saveAssignment() {
+    var title = document
+        .getElementById('assignmentTitle')
+        .value
+        .trim();
+
+    if (!title) {
+        alert('Geef de opdracht een titel.');
+        return;
+    }
+
+    if (currentAssignment !== null) {
+        currentAssignment.title = title;
+        currentAssignment.goals = structuredClone(currentGoals);
+    }
+    else {
+        var assignment = {
+            id: crypto.randomUUID(),
+            title: title,
+            goals: structuredClone(currentGoals)
+        };
+
+        assignments.push(assignment);
+    }
+
+    renderAssignments();
+
+    assignmentModal.hide();
+}
+
+
+// -------------------------
+// Edit an existing assignment
+// -------------------------
+
+function editAssignment(id) {
+    var assignment = null;
+
+    for (var i = 0; i < assignments.length; i++) {
+        if (assignments[i].id === id) {
+            assignment = assignments[i];
+            break;
+        }
+    }
+
+    if (assignment === null) {
+        return;
+    }
+
+    currentAssignment = assignment;
+    currentGoals = structuredClone(assignment.goals);
+
+    document
+        .getElementById('assignmentModalTitle')
+        .textContent = 'Opdracht wijzigen';
+
+    document
+        .getElementById('assignmentTitle')
+        .value = assignment.title;
+
+    renderGoals();
+
+    assignmentModal.show();
+}
+
+
+// -------------------------
+// Convert Navigator response
+// -------------------------
+
+function mapNavigatorSelection(selection) {
+    var goals = [];
+
+    if (selection === null || selection === undefined) {
+        return goals;
+    }
+
+    for (var i = 0; i < selection.length; i++) {
+        var entry = selection[i];
+
+        var structureItem = entry[1];
+        var item = structureItem.curriculumItem;
+
+        var breadcrumbs = [];
+
+        if (item.breadcrumbs !== undefined && item.breadcrumbs !== null) {
+            breadcrumbs = item.breadcrumbs;
+        }
+
+        var goal = {
+            curriculumIdentifier: item.curriculumIdentifier,
+            curriculumItemIdentifier: item.identifier,
+            text: item.text,
+            category: item.category,
+            type: item.type,
+            breadcrumbs: breadcrumbs
+        };
+
+        goals.push(goal);
+    }
+
+    return goals;
+}
+
+
+// -------------------------
+// Render selected goals
+// -------------------------
+
+function renderGoals() {
+    var list = document.getElementById('goalList');
+    var noGoals = document.getElementById('noGoals');
+
+    list.innerHTML = '';
+
+    if (currentGoals.length === 0) {
+        noGoals.hidden = false;
+        return;
+    }
+
+    noGoals.hidden = true;
+
+    for (var i = 0; i < currentGoals.length; i++) {
+        var goal = currentGoals[i];
+
+        var listItem = document.createElement('li');
+        listItem.className = 'list-group-item';
+
+        var breadcrumbText = '';
+
+        if (goal.breadcrumbs !== null &&
+            goal.breadcrumbs !== undefined &&
+            goal.breadcrumbs.length > 0) {
+
+            for (var j = 0; j < goal.breadcrumbs.length; j++) {
+                if (j > 0) {
+                    breadcrumbText += ' > ';
+                }
+
+                breadcrumbText += goal.breadcrumbs[j].text;
+            }
+        }
+
+        if (breadcrumbText !== '') {
+            var breadcrumbElement = document.createElement('div');
+
+            breadcrumbElement.className = 'small text-muted';
+            breadcrumbElement.textContent = breadcrumbText;
+
+            listItem.appendChild(breadcrumbElement);
+        }
+
+        var goalText = document.createElement('div');
+
+        if (goal.text !== null && goal.text !== undefined) {
+            goalText.textContent = goal.text;
+        }
+        else {
+            goalText.textContent = '';
+        }
+
+        listItem.appendChild(goalText);
+
+        list.appendChild(listItem);
+    }
+}
+
+
+// -------------------------
+// Render assignments
+// -------------------------
+
+function renderAssignments() {
+    var tbody = document.getElementById('assignments');
+
+    tbody.innerHTML = '';
+
+    if (assignments.length === 0) {
+        var emptyRow = document.createElement('tr');
+        var emptyCell = document.createElement('td');
+
+        emptyCell.colSpan = 3;
+        emptyCell.className = 'text-center text-muted py-4';
+        emptyCell.textContent = 'Nog geen opdrachten.';
+
+        emptyRow.appendChild(emptyCell);
+        tbody.appendChild(emptyRow);
+
+        return;
+    }
+
+    for (var i = 0; i < assignments.length; i++) {
+        var assignment = assignments[i];
+
+        var row = document.createElement('tr');
+
+        var titleCell = document.createElement('td');
+        titleCell.textContent = assignment.title;
+
+        var goalsCell = document.createElement('td');
+
+        var badge = document.createElement('span');
+        badge.className = 'badge text-bg-secondary';
+        badge.textContent = assignment.goals.length;
+
+        goalsCell.appendChild(badge);
+
+        var actionCell = document.createElement('td');
+        actionCell.className = 'text-end';
+
+        var editButton = document.createElement('button');
+
+        editButton.type = 'button';
+        editButton.className = 'btn btn-sm btn-outline-primary';
+        editButton.textContent = 'Wijzigen';
+        editButton.setAttribute('data-id', assignment.id);
+
+        editButton.addEventListener('click', function (event) {
+            var assignmentId = event.currentTarget.getAttribute('data-id');
+
+            editAssignment(assignmentId);
+        });
+
+        actionCell.appendChild(editButton);
+
+        row.appendChild(titleCell);
+        row.appendChild(goalsCell);
+        row.appendChild(actionCell);
+
+        tbody.appendChild(row);
+    }
+}
+
+
+// -------------------------
+// Initial render
+// -------------------------
+
+renderAssignments();
