@@ -10,6 +10,26 @@ var assignments = [];
 var currentAssignment = null;
 var currentGoals = [];
 
+var typeStyles = {
+    title: { label: 'Titel', pillClass: 'pill-title', borderColor: '#4f46e5' },
+    'concept-title': { label: 'Concept titel', pillClass: 'pill-concept-title', borderColor: '#0284c7' },
+    'example-title': { label: 'Voorbeeld titel', pillClass: 'pill-example-title', borderColor: '#d97706' },
+    'mia-title': { label: 'MIA titel', pillClass: 'pill-mia-title', borderColor: '#0f766e' },
+    concept_goal: { label: 'Concept doel', pillClass: 'pill-concept-goal', borderColor: '#0891b2' },
+    default_goal: { label: 'Doel', pillClass: 'pill-default-goal', borderColor: '#22c55e' },
+    minimum_goal: { label: 'Minimum doel', pillClass: 'pill-minimum-goal', borderColor: '#f97316' },
+    mia_goal: { label: 'MIA doel', pillClass: 'pill-mia-goal', borderColor: '#ef4444' },
+    knowledge_processing: { label: 'Kennisverw.', pillClass: 'pill-knowledge', borderColor: '#8b5cf6' },
+    learning_path: { label: 'Leerlijn', pillClass: 'pill-learning-path', borderColor: '#06b6d4' },
+    example: { label: 'Voorbeeld', pillClass: 'pill-example', borderColor: '#f59e0b' },
+    related: { label: 'Gerelateerd', pillClass: 'pill-related', borderColor: '#a855f7' },
+    sequential: { label: 'Volgorde', pillClass: 'pill-sequential', borderColor: '#ec4899' },
+    minimum: { label: 'Minimum', pillClass: 'pill-minimum', borderColor: '#f59e0b' },
+    asterisk: { label: 'Opmerking', pillClass: 'pill-asterisk', borderColor: '#94a3b8' },
+    mia_information: { label: 'MIA info', pillClass: 'pill-mia-info', borderColor: '#14b8a6' },
+    unknown: { label: 'Onbekend', pillClass: 'pill-default', borderColor: '#6b7280' }
+};
+
 
 // -------------------------
 // Event handlers
@@ -196,19 +216,41 @@ function mapNavigatorSelection(selection) {
             breadcrumbs = item.breadcrumbs;
         }
 
+        var level = 0;
+
+        if (item.metadata !== undefined &&
+            item.metadata !== null &&
+            item.metadata.level !== undefined &&
+            item.metadata.level !== null) {
+
+            level = Number(item.metadata.level) || 0;
+        }
+
         var goal = {
             curriculumIdentifier: item.curriculumIdentifier,
             curriculumItemIdentifier: item.identifier,
             text: item.text,
             category: item.category,
             type: item.type,
-            breadcrumbs: breadcrumbs
+            breadcrumbs: breadcrumbs,
+            level: level
         };
 
         goals.push(goal);
     }
 
     return goals;
+}
+
+
+function getTypeStyle(type) {
+    var normalizedType = (type || 'unknown').toString().trim().toLowerCase();
+
+    if (typeStyles[normalizedType] !== undefined) {
+        return typeStyles[normalizedType];
+    }
+
+    return typeStyles.unknown;
 }
 
 
@@ -233,7 +275,33 @@ function renderGoals() {
         var goal = currentGoals[i];
 
         var listItem = document.createElement('li');
-        listItem.className = 'list-group-item';
+        listItem.className = 'list-group-item goal-item';
+
+        var level = Number(goal.level) || 0;
+        var indent = Math.max(level - 1, 0) * 18;
+
+        listItem.style.marginLeft = indent + 'px';
+
+        var typeStyle = getTypeStyle(goal.type);
+        listItem.style.borderLeft = '4px solid ' + typeStyle.borderColor;
+
+        var metaRow = document.createElement('div');
+        metaRow.className = 'd-flex align-items-center gap-2 mb-2';
+
+        var typePill = document.createElement('span');
+        typePill.className = 'goal-type-pill ' + typeStyle.pillClass;
+        typePill.textContent = typeStyle.label;
+
+        metaRow.appendChild(typePill);
+
+        if (level > 0) {
+            var levelBadge = document.createElement('span');
+            levelBadge.className = 'goal-level-badge';
+            levelBadge.textContent = 'Niveau ' + level;
+            metaRow.appendChild(levelBadge);
+        }
+
+        listItem.appendChild(metaRow);
 
         var breadcrumbText = '';
 
@@ -253,7 +321,7 @@ function renderGoals() {
         if (breadcrumbText !== '') {
             var breadcrumbElement = document.createElement('div');
 
-            breadcrumbElement.className = 'small text-muted';
+            breadcrumbElement.className = 'small text-muted mb-1';
             breadcrumbElement.textContent = breadcrumbText;
 
             listItem.appendChild(breadcrumbElement);
