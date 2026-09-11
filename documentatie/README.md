@@ -6,6 +6,7 @@ Aanvullende documentatie bij de GO! Navigator BaO integratiedemo (zie de [hoofd-
 
 | Bestand | Omschrijving |
 |---|---|
+| [`navigator-bao-selector-postmessage-protocol.pdf`](navigator-bao-selector-postmessage-protocol.pdf) | Officiële documentatie van het `postMessage`-protocol om te communiceren met de GO! Navigator BaO Selector (command/event messages, integratiegids, volledige message schema's). |
 | [`navigator-bao-curricula-api.openapi.yaml`](navigator-bao-curricula-api.openapi.yaml) | OpenAPI 3.0-specificatie van de officiële Navigator BaO Curricula API (endpoints, schema's, foutafhandeling). |
 | [`navigator-bao-curricula-api.postman_collection.json`](navigator-bao-curricula-api.postman_collection.json) | Postman-collectie om de API manueel te testen. Zie de bijhorende [readme](navigator-bao-curricula-api.postman_collection.readme.md). |
 | [`GO-leerplannen-secundair_2025-09.json`](GO-leerplannen-secundair_2025-09.json) | JSON-export van de GO!-leerplannen secundair onderwijs (september 2025). |

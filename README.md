@@ -11,20 +11,22 @@ De integratie bestaat uit twee onderdelen:
 
 ## 1. Navigator Selector
 
-De GO! Navigator Selector kan vanuit een externe webapplicatie geopend worden:
+De GO! Navigator Selector kan vanuit een externe webapplicatie geopend worden, als popup tab of als `iframe`:
 
 ```text
 https://g-o.smartschool.be/navigator-bao/selector/basisonderwijs
 ```
 
-De communicatie tussen de toepassing en Navigator gebeurt via de browser-API `window.postMessage`.
+Optioneel met query parameters om een specifiek curriculum en/of curriculumitem te tonen: `?curriculumId=<uuid>&curriculumItemId=<uuid>`.
+
+De communicatie tussen de toepassing en Navigator gebeurt via de browser-API `window.postMessage`. De volledige, officiële specificatie van dit protocol staat in [`documentatie/navigator-bao-selector-postmessage-protocol.pdf`](documentatie/navigator-bao-selector-postmessage-protocol.pdf). Onderstaand overzicht is een beknopte samenvatting.
 
 ### Basisflow
 
 ```text
 Applicatie
    │
-   │ opent Navigator
+   │ opent Navigator (popup of iframe)
    ▼
 Navigator Selector
    │
@@ -32,7 +34,7 @@ Navigator Selector
    ▼
 Applicatie
    │
-   │ setSelection (optioneel)
+   │ setSelection (optioneel, enkel na ready)
    ▼
 Navigator Selector
    │
@@ -43,21 +45,21 @@ Navigator Selector
 Applicatie
 ```
 
-Navigator stuurt volgende events:
+Navigator stuurt volgende **event messages**:
 
-- `ready` – de selector is klaar;
-- `save` – de gebruiker heeft zijn selectie opgeslagen;
-- `close` – de selector wordt gesloten.
+- `ready` – de selector is geïnitialiseerd en klaar om commands te ontvangen;
+- `save` – de gebruiker heeft zijn selectie opgeslagen (`data: { selection }`);
+- `close` – de selectortab wordt gesloten.
 
-De toepassing kan een bestaande selectie terug naar Navigator sturen via `setSelection`.
+De toepassing kan enkel **na** het ontvangen van `ready` een **command message** naar Navigator sturen. Momenteel is er één command: `setSelection`, om een bestaande selectie in de selector te zetten.
 
-Een selectie-item bestaat uit:
+Een selectie-item (`SimpleSelectionItem`) bestaat uit:
 
-```javascript
-{
-    curriculumIdentifier: '...',
-    curriculumItemIdentifier: '...'
-}
+```typescript
+type SimpleSelectionItem = {
+    curriculumIdentifier: string;
+    curriculumItemIdentifier: string;
+};
 ```
 
 ---
@@ -176,10 +178,10 @@ Gebruik de **Curriculum API** wanneer curriculumdata programmatisch moet worden 
 
 Dit project is bedoeld als technisch integratievoorbeeld.
 
-De Curriculum API is officieel gedocumenteerd in [`documentatie/navigator-bao-curricula-api.openapi.yaml`](documentatie/navigator-bao-curricula-api.openapi.yaml) en kan in de toekomst wijzigen.
+Zowel het Selector-protocol als de Curriculum API zijn officieel gedocumenteerd (zie [`documentatie/`](documentatie/README.md)) en kunnen in de toekomst wijzigen.
 
 ---
 
 ## Documentatie
 
-De map [`documentatie/`](documentatie/README.md) bevat de officiële OpenAPI-specificatie, een Postman-collectie, een JSON-export van de leerplannen secundair onderwijs, de kenniskaart leerplanconcept, en info over de openbare (publieke) versie van GO! Navigator. Zie [`documentatie/README.md`](documentatie/README.md) voor het overzicht.
+De map [`documentatie/`](documentatie/README.md) bevat de officiële Selector-protocolspecificatie, de officiële OpenAPI-specificatie van de Curriculum API, een Postman-collectie, een JSON-export van de leerplannen secundair onderwijs, de kenniskaart leerplanconcept, en info over de openbare (publieke) versie van GO! Navigator. Zie [`documentatie/README.md`](documentatie/README.md) voor het overzicht.
