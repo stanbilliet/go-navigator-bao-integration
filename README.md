@@ -109,7 +109,7 @@ De demo bewaart alles enkel in het geheugen en heeft geen backend of database no
 
 Navigator gebruikt daarnaast een API om de beschikbare curricula en hun structuur op te halen.
 
-> **Let op:** deze endpoints zijn afgeleid uit het netwerkverkeer van de GO! Navigator BaO Selector en zijn geen officieel gepubliceerde Smartschool API-documentatie.
+> **Let op:** de volledige, officiële specificatie van deze API staat in [`documentatie/navigator-bao-curricula-api.openapi.yaml`](documentatie/navigator-bao-curricula-api.openapi.yaml). Onderstaand overzicht is een beknopte samenvatting.
 
 Base URL:
 
@@ -176,7 +176,7 @@ Gebruik de **Curriculum API** wanneer curriculumdata programmatisch moet worden 
 
 Dit project is bedoeld als technisch integratievoorbeeld.
 
-De Curriculum API is afgeleid uit het actuele gedrag van GO! Navigator en kan in de toekomst wijzigen.
+De Curriculum API is officieel gedocumenteerd in [`documentatie/navigator-bao-curricula-api.openapi.yaml`](documentatie/navigator-bao-curricula-api.openapi.yaml) en kan in de toekomst wijzigen.
 
 ---
 
