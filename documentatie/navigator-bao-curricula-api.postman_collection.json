@@ -1,0 +1,135 @@
+{
+  "info": {
+    "_postman_id": "4d4dfe55-5a44-46e2-a99d-30f95c3e3236",
+    "name": "Smartschool Doelenset",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "24583254"
+  },
+  "item": [
+    {
+      "name": "GetCuricula",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/curricula/{{platformId}}/{{formatedDateTimeToday}}/{{source}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "curricula",
+            "{{platformId}}",
+            "{{formatedDateTimeToday}}",
+            "{{source}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GetStructure",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/structure/{{platformId}}/{{structureId}}/{{source}}/{{formatedDateTimeToday}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "structure",
+            "{{platformId}}",
+            "{{structureId}}",
+            "{{source}}",
+            "{{formatedDateTimeToday}}"
+          ],
+          "query": [
+            {
+              "key": "curriculumIdentifier",
+              "value": null,
+              "disabled": true
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "PostConcordance",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"curriculumItemIdentifiers\": [\r\n\"1071_3e9bbf13-78db-4980-84a2-4a3cddf73331_navigator-bao\"\r\n  ]\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/curricula/concordance/2024-10-11",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "curricula",
+            "concordance",
+            "2024-10-11"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          "const today = new Date();\r",
+          "const formattedDate = today.toISOString().split('T')[0];\r",
+          "\r",
+          "pm.collectionVariables.set(\"formatedDateTimeToday\", formattedDate);"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": ""
+    },
+    {
+      "key": "formatedDateTimeToday",
+      "value": ""
+    },
+    {
+      "key": "platformId",
+      "value": ""
+    },
+    {
+      "key": "source",
+      "value": ""
+    },
+    {
+      "key": "structureId",
+      "value": ""
+    }
+  ]
+}

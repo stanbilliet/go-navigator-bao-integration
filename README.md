@@ -177,3 +177,9 @@ Gebruik de **Curriculum API** wanneer curriculumdata programmatisch moet worden 
 Dit project is bedoeld als technisch integratievoorbeeld.
 
 De Curriculum API is afgeleid uit het actuele gedrag van GO! Navigator en kan in de toekomst wijzigen.
+
+---
+
+## Documentatie
+
+De map [`documentatie/`](documentatie/README.md) bevat de officiële OpenAPI-specificatie, een Postman-collectie, een JSON-export van de leerplannen secundair onderwijs, de kenniskaart leerplanconcept, en info over de openbare (publieke) versie van GO! Navigator. Zie [`documentatie/README.md`](documentatie/README.md) voor het overzicht.

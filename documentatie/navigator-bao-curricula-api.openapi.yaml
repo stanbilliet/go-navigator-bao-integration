@@ -1,0 +1,763 @@
+openapi: 3.0.2
+info:
+  title: Navigator BaO Curricula API
+  version: "0.1.0"
+  description: |
+    * Smartschool Navigator BaO Curricula API *
+
+    Read the GO! basisonderwijs curricula (leerplannen) that Smartschool publishes through Navigator BaO: the list of
+    curricula, the full goal structure of a curriculum, the details of a set of goals, and the concordance that maps
+    goals of a deprecated curriculum version onto the goals of the version that replaces it.
+
+    Version log:
+      - 0.1.0     | 2026-09-08 | Initial version: list curricula, curriculum structure, selection details, concordance
+
+    Access:
+      All endpoints are public and need no credentials. They are served from the GO! platform only
+      (`https://g-o.smartschool.be`); the same paths on any other Smartschool platform require a Smartschool login.
+
+    Identifiers:
+      A curriculum and every item inside it (goals, titles, examples, …) are identified by a string of the form
+      `{platformId}_{uuid}_{source}`, for example `1071_5e0f648b-5492-4c1d-8027-f3064c987b1f_navigator-bao`.
+      The `source` is always `navigator-bao`. The `platformId` is the id of the GO! platform: `1071` on
+      production. The same value is echoed back as the first segment of every identifier the API returns, so pass
+      identifiers back exactly as you received them and take `platformId` from there. The uuid alone is stable across
+      environments; the platform id is not.
+
+    Dates:
+      Every `date` is `YYYY-MM-DD`. Curricula are versioned: a new school year can introduce a new version of a
+      curriculum while the previous version stays available for consultation. The date you pass selects the versions
+      that are active on that day and determines the `state` (`active` / `deprecated`) of the curricula you get back.
+
+    Concordance:
+      When a curriculum version is replaced, GO! publishes a concordance: for every goal of the old version, the
+      goal(s) of the new version that take its place (or nothing, when the goal was dropped). Use
+      `POST /curricula/concordance/{date}` to translate the goal identifiers you stored to the goals that apply on a
+      date; then fetch their details with `POST /curricula/selection/{date}`.
+
+    Errors:
+      Every error response uses the `application/problem+json` media type and carries a numeric `status` and a
+      short `title`: `400` for a malformed request (unknown identifier format, invalid date), `403` when an
+      identifier is not a `navigator-bao` identifier, `404` when a curriculum does not exist.
+servers:
+  - url: 'https://{subdomain}.smartschool.be/curriculum/api/v1'
+    variables:
+      subdomain:
+        default: g-o
+        enum:
+          - g-o
+        description: Subdomain of the GO! platform. Anonymous access is only granted on this platform.
+paths:
+  /curricula/{platformId}/{date}/{source}:
+    get:
+      summary: List the curricula active on a date
+      operationId: curriculum_apiv1_curricula_list
+      description: |
+        Lists every visible Navigator BaO curriculum whose version is active on the given date: `version.startDate`
+        is on or before the date and `version.endDate` is empty or after the date. Because of that filter every
+        returned curriculum has `state: active`; the previous version of a replaced curriculum is listed until the
+        day its `endDate` is reached.
+      parameters:
+        - $ref: '#/components/parameters/PlatformId'
+        - $ref: '#/components/parameters/Date'
+        - $ref: '#/components/parameters/Source'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Curriculum'
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - curricula
+  /structure/{platformId}/{curriculumIdentifier}/{source}/{date}:
+    get:
+      summary: Get the full structure of a curriculum
+      operationId: curriculum_apiv1_structure_by_id_and_date
+      description: |
+        Returns the curriculum with its complete tree of curriculum items (titles, goals, examples, …) in display
+        order. The tree is not filtered by date: an old version keeps returning its full structure. The `date` only
+        determines `curriculum.state` (`deprecated` when the date falls outside the version window).
+      parameters:
+        - $ref: '#/components/parameters/PlatformId'
+        - name: curriculumIdentifier
+          in: path
+          description: The identifier of the curriculum, as returned by the list endpoint
+          required: true
+          schema:
+            $ref: '#/components/schemas/CurriculumIdentifier'
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Date'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurriculumStructure'
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - structure
+  /curricula/selection/{date}:
+    post:
+      summary: Get the details of a selection of curriculum items
+      operationId: curriculum_apiv1_curricula_selection
+      description: |
+        Returns one structure per curriculum that occurs in the selection. Each tree is reduced to the selected
+        items, their ancestors and their descendants, so you can render the selected goals in context. Goals in a
+        selection additionally carry `breadcrumbs` and, for `default_goal` items, `metadata.linkedCurriculumItems`.
+        Selections that point to a curriculum whose version is no longer (or not yet) open **today** — not on the
+        given `date` — are dropped unless `configuration.includeDeprecations` is `true`.
+      parameters:
+        - $ref: '#/components/parameters/Date'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectionRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CurriculumStructure'
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - selection
+  /curricula/concordance/{date}:
+    post:
+      summary: Resolve curriculum items through the concordance
+      operationId: curriculum_apiv1_curricula_concordance
+      description: |
+        Translates the given curriculum item identifiers to the identifiers that apply on the given date. Every
+        requested identifier gets exactly one entry in the response; match entries on `curriculumItemIdentifier`,
+        not on position. `concordance` lists the identifiers to use instead:
+          - the identifier itself when no concordance applies to it (the goal is still current, or its concordance
+            only starts after the given date);
+          - the identifier(s) of the replacing goal(s) when the goal was remapped — chains are followed, so the
+            result never contains an identifier that is itself remapped on that date;
+          - an empty list when the goal was removed without replacement.
+        Identifiers of goals that do not (or no longer) exist are never returned: an unknown identifier resolves to
+        an empty list, and replacing goals that no longer exist are left out.
+        Only `navigator-bao` identifiers are accepted.
+      parameters:
+        - $ref: '#/components/parameters/Date'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConcordanceRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CurriculumItemConcordance'
+              example:
+                - curriculumItemIdentifier: '1071_9797c1db-eda1-41d1-90e5-fa11ce22d6ed_navigator-bao'
+                  concordance:
+                    - '1071_2d1f0b6a-7c6e-4b7a-9e0a-1f2b3c4d5e6f_navigator-bao'
+                    - '1071_6a5b4c3d-2e1f-4a0b-8c9d-0e1f2a3b4c5d_navigator-bao'
+                - curriculumItemIdentifier: '1071_0e1dc78f-1111-4222-8333-444455556666_navigator-bao'
+                  concordance:
+                    - '1071_0e1dc78f-1111-4222-8333-444455556666_navigator-bao'
+                - curriculumItemIdentifier: '1071_31d3bbeb-7777-4888-9999-aaaabbbbcccc_navigator-bao'
+                  concordance: []
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - concordance
+components:
+  parameters:
+    PlatformId:
+      name: platformId
+      in: path
+      description: |
+        The id of the GO! platform (`1071` on production). It is echoed back as the first segment of every
+        returned identifier; reuse it from there for follow-up calls.
+      required: true
+      schema:
+        type: integer
+        example: 1071
+    Date:
+      name: date
+      in: path
+      description: The date (`YYYY-MM-DD`) for which curricula, states and concordance are resolved
+      required: true
+      schema:
+        type: string
+        format: date
+        example: '2026-09-01'
+    Source:
+      name: source
+      in: path
+      description: The curriculum source. Always `navigator-bao` for this API.
+      required: true
+      schema:
+        $ref: '#/components/schemas/CurriculumSource'
+  responses:
+    Error:
+      description: Error response (`application/problem+json`). See the "Errors" section in the API description.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      required:
+        - status
+        - title
+      properties:
+        status:
+          type: integer
+          example: 403
+        title:
+          type: string
+          example: Forbidden
+        detail:
+          type: string
+        type:
+          type: string
+    CurriculumSource:
+      type: string
+      enum:
+        - navigator-bao
+    CurriculumIdentifier:
+      type: string
+      description: '`{platformId}_{uuid}_navigator-bao`'
+      pattern: '^[1-9]\d*_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}_navigator-bao$'
+      example: '1071_5e0f648b-5492-4c1d-8027-f3064c987b1f_navigator-bao'
+    CurriculumItemIdentifier:
+      type: string
+      description: '`{platformId}_{uuid}_navigator-bao`'
+      pattern: '^[1-9]\d*_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}_navigator-bao$'
+      example: '1071_9797c1db-eda1-41d1-90e5-fa11ce22d6ed_navigator-bao'
+    Curriculum:
+      type: object
+      required:
+        - platformId
+        - source
+        - identifier
+        - title
+        - version
+        - prefix
+        - sort
+        - isOldVersion
+        - capabilities
+        - weblinks
+        - state
+      properties:
+        platformId:
+          type: integer
+          example: 1071
+        source:
+          $ref: '#/components/schemas/CurriculumSource'
+        identifier:
+          $ref: '#/components/schemas/CurriculumIdentifier'
+        title:
+          type: string
+          example: Wereldoriëntatie
+        version:
+          $ref: '#/components/schemas/CurriculumVersion'
+        prefix:
+          type: string
+          description: Short code of the curriculum, shown in front of its goals
+          example: WO
+        sort:
+          type: integer
+          description: Display order among the curricula
+        isOldVersion:
+          type: boolean
+          description: True when a concordance maps this curriculum onto a newer version
+        capabilities:
+          type: object
+          description: Editing capabilities of the caller. For anonymous access `canUserEdit` is always false.
+          properties:
+            canUserEdit:
+              type: boolean
+            isMasterPlatform:
+              type: boolean
+        weblinks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Weblink'
+        state:
+          type: string
+          description: Whether the version is active on the requested date
+          enum:
+            - active
+            - deprecated
+    CurriculumVersion:
+      type: object
+      required:
+        - startDate
+        - endDate
+        - isVisible
+      properties:
+        startDate:
+          type: string
+          format: date
+          example: '2025-09-01'
+        endDate:
+          type: string
+          format: date
+          nullable: true
+          example: null
+        isVisible:
+          type: boolean
+    Weblink:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        icon:
+          type: string
+    CurriculumStructure:
+      type: object
+      required:
+        - curriculum
+        - tree
+        - configuration
+      properties:
+        curriculum:
+          $ref: '#/components/schemas/Curriculum'
+        tree:
+          type: array
+          items:
+            $ref: '#/components/schemas/CurriculumStructureNode'
+        configuration:
+          $ref: '#/components/schemas/CurriculumConfiguration'
+    CurriculumStructureNode:
+      type: object
+      required:
+        - curriculumItem
+        - children
+      properties:
+        curriculumItem:
+          $ref: '#/components/schemas/CurriculumItem'
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/CurriculumStructureNode'
+    CurriculumConfiguration:
+      type: object
+      properties:
+        globalLabels:
+          type: array
+          description: All GO! labels that can occur on goals of this curriculum
+          items:
+            $ref: '#/components/schemas/GlobalLabel'
+    CurriculumItem:
+      description: A node of a curriculum. Discriminate on `type`; `category` tells whether the node is a goal or informative.
+      oneOf:
+        - $ref: '#/components/schemas/TitleCurriculumItem'
+        - $ref: '#/components/schemas/DefaultGoalCurriculumItem'
+        - $ref: '#/components/schemas/MinimumGoalCurriculumItem'
+        - $ref: '#/components/schemas/ConceptGoalCurriculumItem'
+        - $ref: '#/components/schemas/ConceptTitleCurriculumItem'
+        - $ref: '#/components/schemas/ExampleCurriculumItem'
+        - $ref: '#/components/schemas/ExampleTitleCurriculumItem'
+        - $ref: '#/components/schemas/MiaGoalCurriculumItem'
+        - $ref: '#/components/schemas/MiaInformationCurriculumItem'
+        - $ref: '#/components/schemas/MiaTitleCurriculumItem'
+        - $ref: '#/components/schemas/AsteriskInformationCurriculumItem'
+      discriminator:
+        propertyName: type
+        mapping:
+          title: '#/components/schemas/TitleCurriculumItem'
+          default_goal: '#/components/schemas/DefaultGoalCurriculumItem'
+          minimum_goal: '#/components/schemas/MinimumGoalCurriculumItem'
+          concept_goal: '#/components/schemas/ConceptGoalCurriculumItem'
+          concept-title: '#/components/schemas/ConceptTitleCurriculumItem'
+          example: '#/components/schemas/ExampleCurriculumItem'
+          example-title: '#/components/schemas/ExampleTitleCurriculumItem'
+          mia_goal: '#/components/schemas/MiaGoalCurriculumItem'
+          mia_information: '#/components/schemas/MiaInformationCurriculumItem'
+          mia-title: '#/components/schemas/MiaTitleCurriculumItem'
+          asterisk: '#/components/schemas/AsteriskInformationCurriculumItem'
+    BaseCurriculumItem:
+      type: object
+      required:
+        - platformId
+        - source
+        - identifier
+        - text
+        - curriculumPlatformId
+        - curriculumIdentifier
+        - metadata
+        - category
+        - type
+      properties:
+        platformId:
+          type: integer
+          example: 1071
+        source:
+          $ref: '#/components/schemas/CurriculumSource'
+        identifier:
+          $ref: '#/components/schemas/CurriculumItemIdentifier'
+        text:
+          type: string
+        curriculumPlatformId:
+          type: integer
+          example: 1071
+        curriculumIdentifier:
+          $ref: '#/components/schemas/CurriculumIdentifier'
+        category:
+          type: string
+          enum:
+            - goal
+            - information
+        type:
+          type: string
+        metadata:
+          type: object
+          properties:
+            icon:
+              type: string
+            prefix:
+              type: string
+              description: The number or code shown in front of the item, e.g. `WO 1.2`
+    TitleCurriculumItem:
+      allOf:
+        - $ref: '#/components/schemas/BaseCurriculumItem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [title]
+            category:
+              type: string
+              enum: [information]
+            metadata:
+              type: object
+              properties:
+                level:
+                  type: integer
+                  description: Nesting level of the title
+    DefaultGoalCurriculumItem:
+      allOf:
+        - $ref: '#/components/schemas/BaseCurriculumItem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [default_goal]
+            category:
+              type: string
+              enum: [goal]
+            metadata:
+              type: object
+              properties:
+                icon:
+                  type: string
+                  nullable: true
+                labels:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Label'
+                informationUrls:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/InformationUrl'
+                linkedCurriculumItems:
+                  type: array
+                  description: Only present in selection responses. Goals related to this goal; the nested items never carry `linkedCurriculumItems` themselves.
+                  items:
+                    $ref: '#/components/schemas/LinkedCurriculumItem'
+            breadcrumbs:
+              type: array
+              description: Only present in selection responses. The path from the curriculum down to the parent of this goal.
+              items:
+                $ref: '#/components/schemas/Breadcrumb'
+    MinimumGoalCurriculumItem:
+      allOf:
+        - $ref: '#/components/schemas/BaseCurriculumItem'
+        - type: object
+          required:
+            - description
+          properties:
+            type:
+              type: string
+              enum: [minimum_goal]
+            category:
+              type: string
+              enum: [information]
+            description:
+              type: string
+            metadata:
+              type: object
+              properties:
+                minimumGoalType:
+                  type: string
+                  enum:
+                    - KO
+                    - L4
+                    - L6
+                groupId:
+                  type: string
+                  format: uuid
+    ConceptGoalCurriculumItem:
+      allOf:
+        - $ref: '#/components/schemas/BaseCurriculumItem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [concept_goal]
+            category:
+              type: string
+              enum: [goal]
+    ConceptTitleCurriculumItem:
+      allOf:
+        - $ref: '#/components/schemas/BaseCurriculumItem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [concept-title]
+            category:
+              type: string
+              enum: [information]
+    ExampleCurriculumItem:
+      allOf:
+        - $ref: '#/components/schemas/BaseCurriculumItem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [example]
+            category:
+              type: string
+              enum: [information]
+    ExampleTitleCurriculumItem:
+      allOf:
+        - $ref: '#/components/schemas/BaseCurriculumItem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [example-title]
+            category:
+              type: string
+              enum: [information]
+    MiaGoalCurriculumItem:
+      allOf:
+        - $ref: '#/components/schemas/BaseCurriculumItem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [mia_goal]
+            category:
+              type: string
+              enum: [goal]
+    MiaInformationCurriculumItem:
+      allOf:
+        - $ref: '#/components/schemas/BaseCurriculumItem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [mia_information]
+            category:
+              type: string
+              enum: [information]
+    MiaTitleCurriculumItem:
+      allOf:
+        - $ref: '#/components/schemas/BaseCurriculumItem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [mia-title]
+            category:
+              type: string
+              enum: [information]
+    AsteriskInformationCurriculumItem:
+      allOf:
+        - $ref: '#/components/schemas/BaseCurriculumItem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [asterisk]
+            category:
+              type: string
+              enum: [information]
+    InformationUrl:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - fiche
+        url:
+          type: string
+          description: Path on the GO! platform, relative to its root
+          example: /navigator/fiche/1071_5e0f648b-5492-4c1d-8027-f3064c987b1f_navigator-bao
+    LinkedCurriculumItem:
+      type: object
+      properties:
+        curriculumItem:
+          $ref: '#/components/schemas/CurriculumItem'
+        type:
+          type: string
+          description: How the linked item relates to the goal
+          enum:
+            - minimum
+            - related
+            - sequential
+    Breadcrumb:
+      type: object
+      properties:
+        identifier:
+          type: string
+          description: A curriculum identifier when `type` is `curriculum`, a curriculum item identifier otherwise
+        text:
+          type: string
+          description: The curriculum prefix when `type` is `curriculum`, the item text otherwise
+        type:
+          type: string
+          enum:
+            - curriculum
+            - curriculum_item
+    Label:
+      oneOf:
+        - $ref: '#/components/schemas/GlobalLabel'
+        - $ref: '#/components/schemas/PlatformLabel'
+      discriminator:
+        propertyName: type
+        mapping:
+          knowledge_processing: '#/components/schemas/GlobalLabel'
+          learning_path: '#/components/schemas/GlobalLabel'
+          platform: '#/components/schemas/PlatformLabel'
+    GlobalLabel:
+      type: object
+      description: A label GO! attaches to goals
+      properties:
+        identifier:
+          type: string
+          format: uuid
+        text:
+          type: string
+        color:
+          type: string
+        type:
+          type: string
+          enum:
+            - knowledge_processing
+            - learning_path
+        id:
+          type: string
+          format: uuid
+          deprecated: true
+          description: Same value as `identifier`
+    PlatformLabel:
+      type: object
+      description: A label the GO! platform attaches to goals
+      properties:
+        identifier:
+          type: string
+        type:
+          type: string
+          enum:
+            - platform
+        text:
+          type: string
+        color:
+          type: string
+        isVisible:
+          type: boolean
+        platformId:
+          type: integer
+        id:
+          type: string
+          deprecated: true
+          description: Same value as `identifier`
+        ssId:
+          type: integer
+          deprecated: true
+          description: Same value as `platformId`
+        locations:
+          type: array
+          items:
+            type: string
+    SelectionRequest:
+      type: object
+      required:
+        - selection
+      properties:
+        selection:
+          type: array
+          items:
+            $ref: '#/components/schemas/SelectionItem'
+        configuration:
+          type: object
+          properties:
+            includeDeprecations:
+              type: boolean
+              default: false
+              description: Also return selections that point to a curriculum version that is not open today
+    SelectionItem:
+      type: object
+      required:
+        - curriculumIdentifier
+        - curriculumItemIdentifier
+      properties:
+        curriculumIdentifier:
+          $ref: '#/components/schemas/CurriculumIdentifier'
+        curriculumItemIdentifier:
+          $ref: '#/components/schemas/CurriculumItemIdentifier'
+    ConcordanceRequest:
+      type: object
+      required:
+        - curriculumItemIdentifiers
+      properties:
+        curriculumItemIdentifiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/CurriculumItemIdentifier'
+      example:
+        curriculumItemIdentifiers:
+          - '1071_9797c1db-eda1-41d1-90e5-fa11ce22d6ed_navigator-bao'
+          - '1071_0e1dc78f-1111-4222-8333-444455556666_navigator-bao'
+          - '1071_31d3bbeb-7777-4888-9999-aaaabbbbcccc_navigator-bao'
+    CurriculumItemConcordance:
+      type: object
+      required:
+        - curriculumItemIdentifier
+        - concordance
+      properties:
+        curriculumItemIdentifier:
+          $ref: '#/components/schemas/CurriculumItemIdentifier'
+        concordance:
+          type: array
+          description: The identifiers to use instead on the requested date — the identifier itself when nothing applies, empty when the goal was removed
+          items:
+            $ref: '#/components/schemas/CurriculumItemIdentifier'
+tags:
+  - name: curricula
+  - name: structure
+  - name: selection
+  - name: concordance
